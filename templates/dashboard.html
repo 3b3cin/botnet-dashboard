@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JSON Command Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #4CAF50;
+        }
+        
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        
+        .response {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            display: none;
+        }
+        
+        .response.success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        
+        .response.error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        
+        .loading {
+            text-align: center;
+            color: #666;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Command Dashboard</h1>
+        
+        <form id="commandForm">
+            <div class="form-group">
+                <label for="cmd">Command:</label>
+                <input type="text" id="cmd" name="cmd" placeholder="Enter your command here..." required>
+            </div>
+            
+            <button type="submit" id="submitBtn">Send Command</button>
+        </form>
+        
+        <div class="loading" id="loading">
+            Sending command...
+        </div>
+        
+        <div class="response" id="response"></div>
+    </div>
+
+    <script>
+        document.getElementById('commandForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const cmd = document.getElementById('cmd').value;
+            const submitBtn = document.getElementById('submitBtn');
+            const loading = document.getElementById('loading');
+            const response = document.getElementById('response');
+            
+            // Show loading state
+            submitBtn.disabled = true;
+            loading.style.display = 'block';
+            response.style.display = 'none';
+            
+            try {
+                const result = await fetch('http://127.0.0.1:5000/command', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        cmd: cmd
+                    })
+                });
+                
+                if (result.ok) {
+                    const data = await result.json();
+                    response.className = 'response success';
+                    response.innerHTML = `
+                        <h3>Success!</h3>
+                        <p><strong>Status:</strong> ${data.status}</p>
+                        <p><strong>Command:</strong> ${data.command}</p>
+                    `;
+                } else {
+                    response.className = 'response error';
+                    response.innerHTML = `
+                        <h3>Error ${result.status}</h3>
+                        <p><strong>Status:</strong> ${result.status} ${result.statusText}</p>
+                        <p><strong>URL:</strong> ${result.url}</p>
+                        <p>This usually means the server route isn't set up correctly or the server isn't running.</p>
+                    `;
+                }
+                
+                response.style.display = 'block';
+                
+            } catch (error) {
+                response.className = 'response error';
+                response.innerHTML = `
+                    <h3>Error</h3>
+                    <p>Failed to send command: ${error.message}</p>
+                `;
+                response.style.display = 'block';
+            } finally {
+                // Reset loading state
+                submitBtn.disabled = false;
+                loading.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
