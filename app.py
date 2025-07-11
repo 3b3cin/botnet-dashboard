@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify, request, session
+from flask import Flask, render_template, jsonify, request, session, Blueprint
 from flask_socketio import SocketIO, send, emit, join_room, leave_room
 from flask_session import Session
 from flask_cors import CORS
@@ -14,9 +14,10 @@ app.config['SESSION_TYPE'] = 'filesystem'
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*")
 Session(app)
-
+# IMPORTANT NOTE* Room IDs are the client ID of the client in that room
 connections = {}  # Changed to dict for easier lookup
 client_list = []
+task_queue = []
 session_ids = set()
 
 class Client:
@@ -34,12 +35,12 @@ class Client:
         return f"Client ID: {self.id}\nName: {self.os_name}\nTime: {self.time_connected}\nCPU: {self.cpu_usage}\nStatus: {self.status}"
 
 class Task:
-    def __init__(self, exec_time = datetime.now(), t_name = 'Task', gpu_req = False, status = 'Pending', important = 2):
+    def __init__(self, command_to_run, exec_time = datetime.now(), t_name = 'Task', status = 'Pending', important = 2):
         self.t_name = t_name
         self.exec_time = exec_time
-        self.gpu_req = gpu_req
         self.status = status
         self.important = important
+        self.command_to_run = command_to_run
     
     def find_Client(self) -> Client:
         index_lowest_usage_client = 0
@@ -82,11 +83,6 @@ class Task:
 @app.route("/")
 def dashboard() -> object:
     return render_template("./dashboard.html")
-
-@app.route("/create/task", methods=['POST'])
-def create_task() -> object:
-    new_task = Task()
-
 
 @app.route("/clients", methods=['GET'])
 def get_clients() -> dict:
@@ -167,10 +163,62 @@ def update_client(data) -> None:
     except:
         emit('update_client', {'response': 'Error updating client data'})
 
-@socketio.on('send_task')
-def send_task(self):
-    room = session['client_id']
-    emit('get_task', {},room=room)
+task_bp = Blueprint("task", __name__)
+
+@task_bp.before_request
+def before_task() -> object:
+    """Creates a new task object and adds it to the task queue"""
+    try:
+        data = request.get_json()
+        t_name = data['t_name']
+        status = data['status']
+        importance = data['important']
+        command_to_run = data['command_to_run']
+        exec_time = data['exec_time']
+        new_task = Task(t_name=t_name, status=status, important=importance, command_to_run=command_to_run, exec_time=exec_time)
+        task_queue.append(new_task)
+    except Exception as e:
+        response = {
+            "Error": e,
+            "message": "Error creating a task"
+        }
+        return jsonify(response)
+
+@task_bp.route('/find', methods=["POST"])
+def send_task(self) -> None:
+    """Finds and sends Task data to correct client based on CPU usage"""
+    # Create an endpoint for creating tasks then send that data here
+    try:
+        
+        for task in task_queue:
+
+            client_for_task = task.find_client()
+            # Parsing data from Task object
+            t_name = task.t_name
+            status = task.status
+            importance = task.important
+            exec_time = task.exec_time
+            command = task.command_to_run
+            # Getting the room_id
+            room_id = client_for_task.id
+
+            emit('get_task', {"t_name": t_name, "status": status,
+                              "importance": importance, "exec_time": exec_time,
+                              "command": command}, room=room_id)
+            task_queue.remove(task)
+    except Exception as e:
+        err_msg = {"Error": e,
+                   "message": "Could not find a client or could not send a task"}
+        return jsonify(err_msg)
+    
+@task_bp.after_request
+def after_task() -> object:
+    response = {
+        "message": "Task created"
+    }
+    return jsonify(response)
+
+app.register_blueprint(task_bp, url_prefix="/task")
 
 @socketio.on('disconnect')
 def handle_disconnect() -> None:
