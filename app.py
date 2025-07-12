@@ -45,7 +45,7 @@ class Task:
     def find_Client(self) -> Client:
         index_lowest_usage_client = 0
         for index, client in enumerate(client_list):
-            if client.cpu_usage < client_list[index_lowest_usage_client]:
+            if client.cpu_usage < client_list[index_lowest_usage_client].cpu_usage:
                 index_lowest_usage_client = index
             else:
                 continue
@@ -144,6 +144,7 @@ def setup_client(data) -> None:
         new_client = Client(client_id, client_time, os_name, usage=cpu, status=data['status'])
         connections[client_id] = new_client
         client_list.append(new_client)
+        join_room(client_id)
         emit('setup_client', {'response':'Client successfully setup', 'client_id': client_id})
         print(connections[client_id])
         print(f"Clients Connected: {len(client_list)}")
@@ -156,69 +157,111 @@ def update_client(data) -> None:
     try:
         client_id = session.get('client_id')
         cpu = data['cpu']
-        status = data['status']
-        connections[client_id].cpu = cpu
-        connections[client_id].status = status
-        print(f"{client_id}: Updated\nCPU Usage: {cpu}\nStatus: {status}")
+        connections[client_id].cpu_usage = cpu
+        print(f"{client_id}: Updated\nCPU Usage: {cpu}")
     except:
         emit('update_client', {'response': 'Error updating client data'})
 
 task_bp = Blueprint("task", __name__)
 
 @task_bp.before_request
-def before_task() -> object:
+def before_task() -> None:  # Changed return type
     """Creates a new task object and adds it to the task queue"""
     try:
+        print("Starting task request")
         data = request.get_json()
         t_name = data['t_name']
         status = data['status']
         importance = data['important']
         command_to_run = data['command_to_run']
         exec_time = data['exec_time']
-        new_task = Task(t_name=t_name, status=status, important=importance, command_to_run=command_to_run, exec_time=exec_time)
+        new_task = Task(
+            command_to_run=command_to_run,
+            exec_time=exec_time, 
+            t_name=t_name,
+            status=status,
+            important=importance
+        )
         task_queue.append(new_task)
+        print("Task added to queue")
+        # NO RETURN - let Flask continue to /find route
+        
     except Exception as e:
-        response = {
-            "Error": e,
+        print(f"Error in before_request: {e}")
+        # Only return on error to stop execution
+        return jsonify({
+            "Error": str(e),
             "message": "Error creating a task"
-        }
-        return jsonify(response)
+        }), 500
 
 @task_bp.route('/find', methods=["POST"])
-def send_task(self) -> None:
+def send_task() -> dict:
     """Finds and sends Task data to correct client based on CPU usage"""
-    # Create an endpoint for creating tasks then send that data here
     try:
-        
-        for task in task_queue:
-
-            client_for_task = task.find_client()
-            # Parsing data from Task object
-            t_name = task.t_name
-            status = task.status
-            importance = task.important
-            exec_time = task.exec_time
-            command = task.command_to_run
-            # Getting the room_id
-            room_id = client_for_task.id
-
-            emit('get_task', {"t_name": t_name, "status": status,
-                              "importance": importance, "exec_time": exec_time,
-                              "command": command}, room=room_id)
+        print("Finding a client for the task")
+        for task in task_queue[:]:
+            if not client_list:
+                break
+                
+            client_for_task = task.find_Client()
+            
+            # Your existing code...
+            socketio.emit('get_task', {
+                "t_name": task.t_name, 
+                "status": task.status,
+                "importance": task.important, 
+                "exec_time": str(task.exec_time),
+                "command": task.command_to_run, 
+                "client": client_for_task.id
+            }, room=client_for_task.id)
+            
             task_queue.remove(task)
+            print("Removing task from queue")
+            
+        # THIS is the response the frontend receives
+        return jsonify({"message": "Task created and processed successfully"})
+        
     except Exception as e:
-        err_msg = {"Error": e,
-                   "message": "Could not find a client or could not send a task"}
-        return jsonify(err_msg)
+        print(f"Error in send_task: {e}")
+        return jsonify({
+            "Error": str(e),
+            "message": "Could not find a client or could not send a task"
+        }), 500
     
 @task_bp.after_request
-def after_task() -> object:
-    response = {
-        "message": "Task created"
-    }
-    return jsonify(response)
+def after_task(response) -> object:
+    return response
 
 app.register_blueprint(task_bp, url_prefix="/task")
+
+@socketio.on('handle_err')
+def handle_err(data) -> None:
+    print(data)
+
+@socketio.on('join_room')
+def handle_join(data):
+    join_room(data['room'])
+    emit("message", {"message": f"Room {data['room']} joined!"})
+
+@socketio.on('executed_cmd')
+def cmd_output(data) -> None:  # Change return type
+    output = data['output']
+    client_id = data['client_id']
+    name = data['name']
+    
+    # Emit the data to all connected dashboards
+    socketio.emit('cmd_output', {
+        "output": output, 
+        "client": client_id, 
+        "name": name
+    })
+
+@socketio.on('update_status')
+def status_change(data):
+    new_status = data['status']
+    client_id = data['client_id']
+    connections[client_id].status = new_status
+    return jsonify({"message": "Status updated"})
 
 @socketio.on('disconnect')
 def handle_disconnect() -> None:
@@ -228,7 +271,7 @@ def handle_disconnect() -> None:
         client_name = connections[client_id].os_name
         del connections[client_id]
         session_ids.discard(client_id)
-        client_list.remove(client_id)
+        client_list[:] = [c for c in client_list if c.id != client_id]
             
         # Broadcast disconnection to dashboard
         socketio.emit('client_disconnected', {'response': f"{client_id} disconnected"})

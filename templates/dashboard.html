@@ -3,178 +3,811 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JSON Command Dashboard</title>
+    <title>Automation Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    animation: {
+                        'fade-in': 'fadeIn 0.6s ease-out',
+                        'slide-up': 'slideUp 0.5s ease-out',
+                        'pulse-soft': 'pulseSoft 2s ease-in-out infinite'
+                    },
+                    keyframes: {
+                        fadeIn: {
+                            '0%': { opacity: '0', transform: 'translateY(20px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' }
+                        },
+                        slideUp: {
+                            '0%': { opacity: '0', transform: 'translateY(30px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' }
+                        },
+                        pulseSoft: {
+                            '0%, 100%': { opacity: '1' },
+                            '50%': { opacity: '0.7' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        
         body {
-            font-family: Arial, sans-serif;
-            max-width: 600px;
-            margin: 50px auto;
-            padding: 20px;
-            background-color: #f5f5f5;
+            font-family: 'Inter', sans-serif;
         }
         
-        .container {
-            background: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        .glass {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
         
-        h1 {
-            color: #333;
-            text-align: center;
-            margin-bottom: 30px;
+        .dark .glass {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid rgba(148, 163, 184, 0.1);
         }
         
-        .form-group {
-            margin-bottom: 20px;
+        .card-hover:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
         }
         
-        label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-            color: #555;
+        .dark .card-hover:hover {
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
         }
         
-        input[type="text"] {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #ddd;
-            border-radius: 4px;
-            font-size: 16px;
-            box-sizing: border-box;
+        .scrollbar-thin::-webkit-scrollbar {
+            width: 6px;
         }
         
-        input[type="text"]:focus {
-            outline: none;
-            border-color: #4CAF50;
+        .scrollbar-thin::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 3px;
         }
         
-        button {
-            background-color: #4CAF50;
-            color: white;
-            padding: 12px 30px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-            width: 100%;
+        .scrollbar-thin::-webkit-scrollbar-thumb {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 3px;
         }
         
-        button:hover {
-            background-color: #45a049;
+        .dark .scrollbar-thin::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
         }
         
-        button:disabled {
-            background-color: #cccccc;
-            cursor: not-allowed;
-        }
-        
-        .response {
-            margin-top: 20px;
-            padding: 15px;
-            border-radius: 4px;
-            display: none;
-        }
-        
-        .response.success {
-            background-color: #d4edda;
-            border: 1px solid #c3e6cb;
-            color: #155724;
-        }
-        
-        .response.error {
-            background-color: #f8d7da;
-            border: 1px solid #f5c6cb;
-            color: #721c24;
-        }
-        
-        .loading {
-            text-align: center;
-            color: #666;
-            display: none;
+        .dark .scrollbar-thin::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
         }
     </style>
 </head>
-<body>
-    <div class="container">
-        <h1>Command Dashboard</h1>
-        
-        <form id="commandForm">
-            <div class="form-group">
-                <label for="cmd">Command:</label>
-                <input type="text" id="cmd" name="cmd" placeholder="Enter your command here..." required>
+<body class="min-h-screen bg-gray-50 dark:bg-slate-900 text-gray-900 dark:text-white transition-colors duration-300">
+    
+    <!-- Header -->
+    <header class="bg-white dark:bg-slate-800 shadow-sm border-b border-gray-200 dark:border-slate-700">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center space-x-4">
+                    <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Automation Dashboard</h1>
+                    <div class="hidden md:flex items-center space-x-2">
+                        <div id="connectionDot" class="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+                        <span id="connectionText" class="text-sm text-gray-600 dark:text-gray-300">Connecting...</span>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <button id="themeToggle" class="p-2 rounded-lg bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 transition-colors">
+                        <span id="themeIcon" class="text-xl">🌙</span>
+                    </button>
+                    <button onclick="refreshData()" class="p-2 rounded-lg bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                    </button>
+                </div>
             </div>
-            
-            <button type="submit" id="submitBtn">Send Command</button>
-        </form>
-        
-        <div class="loading" id="loading">
-            Sending command...
         </div>
-        
-        <div class="response" id="response"></div>
-    </div>
+    </header>
+
+    <!-- Stats -->
+    <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div class="glass rounded-xl p-6 transition-all duration-300 hover:shadow-lg animate-fade-in">
+                <div class="flex items-center">
+                    <div class="w-8 h-8 bg-green-100 dark:bg-green-900 rounded-lg flex items-center justify-center">
+                        <svg class="w-5 h-5 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Connected Clients</p>
+                        <p id="totalClients" class="text-2xl font-semibold text-gray-900 dark:text-white">0</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass rounded-xl p-6 transition-all duration-300 hover:shadow-lg animate-fade-in" style="animation-delay: 0.1s">
+                <div class="flex items-center">
+                    <div class="w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
+                        <svg class="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                        </svg>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Average CPU</p>
+                        <p id="avgCpu" class="text-2xl font-semibold text-gray-900 dark:text-white">0%</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass rounded-xl p-6 transition-all duration-300 hover:shadow-lg animate-fade-in" style="animation-delay: 0.2s">
+                <div class="flex items-center">
+                    <div class="w-8 h-8 bg-purple-100 dark:bg-purple-900 rounded-lg flex items-center justify-center">
+                        <svg class="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                        </svg>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Commands Sent</p>
+                        <p id="commandCount" class="text-2xl font-semibold text-gray-900 dark:text-white">0</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass rounded-xl p-6 transition-all duration-300 hover:shadow-lg animate-fade-in" style="animation-delay: 0.3s">
+                <div class="flex items-center">
+                    <div class="w-8 h-8 bg-orange-100 dark:bg-orange-900 rounded-lg flex items-center justify-center">
+                        <svg class="w-5 h-5 text-orange-600 dark:text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path>
+                        </svg>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Tasks Executed</p>
+                        <p id="taskCount" class="text-2xl font-semibold text-gray-900 dark:text-white">0</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <!-- Clients List -->
+            <div class="lg:col-span-2">
+                <div class="glass rounded-xl p-6 animate-slide-up">
+                    <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-6">Connected Clients</h2>
+                    <div id="clientsContainer" class="space-y-4 max-h-96 overflow-y-auto scrollbar-thin">
+                        <div class="text-center py-12 text-gray-500 dark:text-gray-400">
+                            <svg class="mx-auto h-12 w-12 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                            </svg>
+                            <p class="text-lg font-medium">No clients connected</p>
+                            <p class="text-sm">Start your client applications to see them here</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Control Panel -->
+            <div class="space-y-6">
+                <!-- Command Section -->
+                <div class="glass rounded-xl p-6 animate-slide-up" style="animation-delay: 0.1s">
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Send Command</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Command</label>
+                            <input type="text" id="commandInput" 
+                                   class="w-full px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-white transition-colors"
+                                   placeholder="Enter command..." autocomplete="off">
+                        </div>
+                        <button id="sendAllBtn" onclick="sendToAllClients()" 
+                                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                            Send to All Clients
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Task Creation -->
+                <div class="glass rounded-xl p-6 animate-slide-up" style="animation-delay: 0.2s">
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Create Task</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Task Name</label>
+                            <input type="text" id="taskName" 
+                                   class="w-full px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-white transition-colors"
+                                   placeholder="Task name...">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Priority</label>
+                            <div class="grid grid-cols-3 gap-2">
+                                <button class="priority-btn px-3 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors" data-priority="1">Low</button>
+                                <button class="priority-btn px-3 py-2 text-sm border-2 border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 rounded-lg active" data-priority="2">Medium</button>
+                                <button class="priority-btn px-3 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors" data-priority="3">High</button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Schedule Time (Optional)</label>
+                            <input type="datetime-local" id="scheduleTime" 
+                                   class="w-full px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-white transition-colors">
+                        </div>
+
+                        <button id="createTaskBtn" onclick="createTask()" 
+                                class="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                            Create Task
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Output and Activity Sections -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
+            <!-- Client Output -->
+            <div class="glass rounded-xl p-6 animate-slide-up" style="animation-delay: 0.4s">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Client Output</h2>
+                    <div class="flex items-center space-x-2">
+                        <button onclick="clearOutput()" 
+                                class="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">
+                            Clear
+                        </button>
+                        <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse" id="outputIndicator"></div>
+                    </div>
+                </div>
+                <div id="clientOutputContainer" class="space-y-3 max-h-96 overflow-y-auto scrollbar-thin">
+                    <div class="text-center py-12 text-gray-500 dark:text-gray-400">
+                        <svg class="mx-auto h-12 w-12 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                        </svg>
+                        <p class="text-lg font-medium">No output yet</p>
+                        <p class="text-sm">Command and task outputs will appear here</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Activity Log -->
+            <div class="glass rounded-xl p-6 animate-slide-up" style="animation-delay: 0.5s">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Activity Log</h2>
+                    <div class="flex items-center space-x-2">
+                        <button onclick="clearActivityLog()" 
+                                class="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">
+                            Clear
+                        </button>
+                        <div class="w-2 h-2 bg-blue-500 rounded-full animate-pulse" id="activityIndicator"></div>
+                    </div>
+                </div>
+                <div id="activityContainer" class="space-y-3 max-h-96 overflow-y-auto scrollbar-thin">
+                    <div class="text-center py-12 text-gray-500 dark:text-gray-400">
+                        <svg class="mx-auto h-12 w-12 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                        <p class="text-lg font-medium">No activity yet</p>
+                        <p class="text-sm">System events will appear here</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
 
     <script>
-        document.getElementById('commandForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
+        // Global variables
+        let clients = [];
+        let commandCount = 0;
+        let taskCount = 0;
+        let selectedPriority = 2;
+        let activityLog = [];
+        let clientOutputLog = [];
+        let isDarkMode = true;
+
+        // Initialize Socket.IO
+        const socket = io();
+
+        // Theme management
+        function initTheme() {
+            const saved = localStorage.getItem('theme');
+            if (saved) {
+                isDarkMode = saved === 'dark';
+            } else {
+                isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            }
+            updateTheme();
+        }
+
+        function updateTheme() {
+            if (isDarkMode) {
+                document.documentElement.classList.add('dark');
+                document.getElementById('themeIcon').textContent = '☀️';
+            } else {
+                document.documentElement.classList.remove('dark');
+                document.getElementById('themeIcon').textContent = '🌙';
+            }
+            localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
+        }
+
+        function toggleTheme() {
+            isDarkMode = !isDarkMode;
+            updateTheme();
+        }
+
+        // Socket events
+        socket.on('connect', function() {
+            updateConnectionStatus(true);
+            refreshData();
+            addActivity('System', 'Connected to server', 'success');
+        });
+
+        socket.on('disconnect', function() {
+            updateConnectionStatus(false);
+            addActivity('System', 'Disconnected from server', 'error');
+        });
+
+        socket.on('setup_client', function(data) {
+            refreshData();
+            addActivity('System', `New client connected: ${data.client_id.substring(0, 8)}...`, 'info');
+        });
+
+        socket.on('client_disconnected', function(data) {
+            refreshData();
+            addActivity('System', data.response, 'warning');
+        });
+
+        socket.on('received', function(data) {
+            console.log('Command response:', data);
+            if (data.status === 'done') {
+                addActivity('Task Complete', data.message, 'success');
+                if (data.output) {
+                    addOutput('Task Output', data.output, data.client || 'Unknown', 'output');
+                }
+                if (data.error) {
+                    addOutput('Task Error', data.error, data.client || 'Unknown', 'error');
+                }
+            } else if (data.output) {
+                addOutput('Command Response', data.output, data.client || 'Unknown', 'output');
+            } else if (data.error) {
+                addOutput('Command Error', data.error, data.client || 'Unknown', 'error');
+            }
+        });
+
+        socket.on('executed_cmd', function(data) {
+            console.log('Task execution result:', data);
+            taskCount++;
+            updateStats();
+            addActivity('Task Executed', `${data.name} completed on ${data.client_id.substring(0, 8)}...`, 'success');
+            if (data.output) {
+                addOutput(data.name, data.output, data.client_id, 'output');
+            }
+        });
+
+        // Handle the cmd_output event emitted by your backend
+        socket.on('cmd_output', function(data) {
+            console.log('Command output received:', data);
+            if (data.output) {
+                addOutput(data.name || 'Command Output', data.output, data.client || 'Unknown', 'output');
+            }
+        });
+
+        // Priority buttons
+        document.querySelectorAll('.priority-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.priority-btn').forEach(b => {
+                    b.classList.remove('active', 'border-2', 'border-blue-500', 'bg-blue-50', 'dark:bg-blue-900/20', 'text-blue-700', 'dark:text-blue-300');
+                    b.classList.add('border', 'border-gray-300', 'dark:border-slate-600');
+                });
+                this.classList.remove('border', 'border-gray-300', 'dark:border-slate-600');
+                this.classList.add('active', 'border-2', 'border-blue-500', 'bg-blue-50', 'dark:bg-blue-900/20', 'text-blue-700', 'dark:text-blue-300');
+                selectedPriority = parseInt(this.dataset.priority);
+            });
+        });
+
+        // Keyboard shortcuts
+        document.getElementById('commandInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                if (e.shiftKey) {
+                    createTask();
+                } else {
+                    sendToAllClients();
+                }
+            }
+        });
+
+        document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+
+        // Functions
+        function updateConnectionStatus(connected) {
+            const dot = document.getElementById('connectionDot');
+            const text = document.getElementById('connectionText');
             
-            const cmd = document.getElementById('cmd').value;
-            const submitBtn = document.getElementById('submitBtn');
-            const loading = document.getElementById('loading');
-            const response = document.getElementById('response');
-            
-            // Show loading state
-            submitBtn.disabled = true;
-            loading.style.display = 'block';
-            response.style.display = 'none';
-            
+            if (connected) {
+                dot.className = 'w-3 h-3 bg-green-500 rounded-full animate-pulse';
+                text.textContent = 'Connected';
+            } else {
+                dot.className = 'w-3 h-3 bg-red-500 rounded-full animate-pulse';
+                text.textContent = 'Disconnected';
+            }
+        }
+
+        async function refreshData() {
             try {
-                const result = await fetch('http://127.0.0.1:5000/command', {
+                const response = await fetch('/clients');
+                clients = await response.json();
+                updateClientDisplay();
+                updateStats();
+            } catch (error) {
+                addActivity('Error', 'Failed to fetch client data', 'error');
+            }
+        }
+
+        function updateClientDisplay() {
+            const container = document.getElementById('clientsContainer');
+            
+            if (clients.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-12 text-gray-500 dark:text-gray-400">
+                        <svg class="mx-auto h-12 w-12 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                        </svg>
+                        <p class="text-lg font-medium">No clients connected</p>
+                        <p class="text-sm">Start your client applications to see them here</p>
+                    </div>
+                `;
+                document.getElementById('createTaskBtn').disabled = true;
+                document.getElementById('sendAllBtn').disabled = true;
+                return;
+            }
+
+            document.getElementById('createTaskBtn').disabled = false;
+            document.getElementById('sendAllBtn').disabled = false;
+
+            container.innerHTML = clients.map((client, index) => {
+                const cpuColor = client.cpu < 30 ? 'text-green-600 dark:text-green-400' : 
+                               client.cpu < 70 ? 'text-yellow-600 dark:text-yellow-400' : 
+                               'text-red-600 dark:text-red-400';
+                
+                const progressColor = client.cpu < 30 ? 'bg-green-500' : 
+                                    client.cpu < 70 ? 'bg-yellow-500' : 'bg-red-500';
+                
+                const statusColor = client.status.toLowerCase() === 'pending' ? 
+                                  'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300' : 
+                                  'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300';
+                
+                return `
+                    <div class="bg-white dark:bg-slate-800 rounded-lg p-4 border border-gray-200 dark:border-slate-700 transition-all duration-300 hover:shadow-lg animate-fade-in" style="animation-delay: ${index * 0.1}s">
+                        <div class="flex items-center justify-between mb-3">
+                            <div>
+                                <h3 class="font-medium text-gray-900 dark:text-white">${client.name || 'Unknown Client'}</h3>
+                                <p class="text-sm text-gray-600 dark:text-gray-400">ID: ${client.id.substring(0, 12)}...</p>
+                            </div>
+                            <div class="text-right">
+                                <div class="${cpuColor} text-lg font-semibold">${client.cpu}%</div>
+                                <span class="inline-flex px-2 py-1 text-xs font-medium rounded-full ${statusColor}">${client.status}</span>
+                            </div>
+                        </div>
+                        <div class="mb-2">
+                            <div class="flex justify-between text-sm text-gray-600 dark:text-gray-400 mb-1">
+                                <span>CPU Usage</span>
+                                <span>${client.cpu}%</span>
+                            </div>
+                            <div class="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-2">
+                                <div class="${progressColor} h-2 rounded-full transition-all duration-500" style="width: ${client.cpu}%"></div>
+                            </div>
+                        </div>
+                        <div class="flex justify-between text-xs text-gray-500 dark:text-gray-400">
+                            <span>Connected: ${client.timeConnected}</span>
+                            <span>Updated: ${new Date().toLocaleTimeString()}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updateStats() {
+            document.getElementById('totalClients').textContent = clients.length;
+            
+            const avgCpu = clients.length > 0 ? 
+                Math.round(clients.reduce((sum, c) => sum + c.cpu, 0) / clients.length) : 0;
+            document.getElementById('avgCpu').textContent = avgCpu + '%';
+            
+            document.getElementById('commandCount').textContent = commandCount;
+            document.getElementById('taskCount').textContent = taskCount;
+        }
+
+        async function sendToAllClients() {
+            const command = document.getElementById('commandInput').value.trim();
+            if (!command) {
+                addActivity('Error', 'Please enter a command', 'error');
+                return;
+            }
+
+            if (!clients.length) {
+                addActivity('Error', 'No clients connected', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/command', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({
-                        cmd: cmd
-                    })
+                    body: JSON.stringify({ cmd: command })
                 });
-                
-                if (result.ok) {
-                    const data = await result.json();
-                    response.className = 'response success';
-                    response.innerHTML = `
-                        <h3>Success!</h3>
-                        <p><strong>Status:</strong> ${data.status}</p>
-                        <p><strong>Command:</strong> ${data.command}</p>
-                    `;
+
+                const result = await response.json();
+                if (result.status === 'sent') {
+                    commandCount++;
+                    updateStats();
+                    addActivity('Command Sent', `"${command}" sent to ${clients.length} clients`, 'info');
+                    document.getElementById('commandInput').value = '';
                 } else {
-                    response.className = 'response error';
-                    response.innerHTML = `
-                        <h3>Error ${result.status}</h3>
-                        <p><strong>Status:</strong> ${result.status} ${result.statusText}</p>
-                        <p><strong>URL:</strong> ${result.url}</p>
-                        <p>This usually means the server route isn't set up correctly or the server isn't running.</p>
-                    `;
+                    throw new Error('Failed to send command');
                 }
-                
-                response.style.display = 'block';
-                
             } catch (error) {
-                response.className = 'response error';
-                response.innerHTML = `
-                    <h3>Error</h3>
-                    <p>Failed to send command: ${error.message}</p>
-                `;
-                response.style.display = 'block';
-            } finally {
-                // Reset loading state
-                submitBtn.disabled = false;
-                loading.style.display = 'none';
+                addActivity('Error', 'Failed to send command to clients', 'error');
             }
-        });
+        }
+
+        async function createTask() {
+            const taskName = document.getElementById('taskName').value.trim();
+            const command = document.getElementById('commandInput').value.trim();
+            const scheduleTime = document.getElementById('scheduleTime').value;
+
+            if (!command) {
+                addActivity('Error', 'Please enter a command', 'error');
+                return;
+            }
+
+            if (!taskName) {
+                addActivity('Error', 'Please enter a task name', 'error');
+                return;
+            }
+
+            if (!clients.length) {
+                addActivity('Error', 'No clients available for task execution', 'error');
+                return;
+            }
+
+            const taskData = {
+                t_name: taskName,
+                command_to_run: command,
+                status: 'Pending',
+                important: selectedPriority,
+                exec_time: scheduleTime || new Date().toISOString()
+            };
+
+            try {
+                const response = await fetch('/task/find', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(taskData)
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    const scheduleText = scheduleTime ? 
+                        ` (scheduled for ${new Date(scheduleTime).toLocaleString()})` : ' (immediate)';
+                    
+                    addActivity('Task Created', 
+                        `"${taskName}" assigned to optimal client${scheduleText}`, 'success');
+                    
+                    // Clear form
+                    document.getElementById('taskName').value = '';
+                    document.getElementById('commandInput').value = '';
+                    document.getElementById('scheduleTime').value = '';
+                } else {
+                    throw new Error(result.message || result.Error || 'Failed to create task');
+                }
+            } catch (error) {
+                addActivity('Error', `Failed to create task: ${error.message}`, 'error');
+            }
+        }
+
+        function addOutput(type, content, clientId, category = 'output') {
+            const timestamp = new Date().toLocaleTimeString();
+            
+            clientOutputLog.unshift({
+                type: type,
+                content: content,
+                clientId: clientId,
+                timestamp: timestamp,
+                category: category
+            });
+
+            if (clientOutputLog.length > 100) {
+                clientOutputLog = clientOutputLog.slice(0, 100);
+            }
+
+            updateOutputDisplay();
+            
+            // Flash indicator
+            const indicator = document.getElementById('outputIndicator');
+            indicator.classList.remove('bg-green-500');
+            indicator.classList.add('bg-blue-500');
+            setTimeout(() => {
+                indicator.classList.remove('bg-blue-500');
+                indicator.classList.add('bg-green-500');
+            }, 1000);
+        }
+
+        function updateOutputDisplay() {
+            const container = document.getElementById('clientOutputContainer');
+            
+            if (clientOutputLog.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-12 text-gray-500 dark:text-gray-400">
+                        <svg class="mx-auto h-12 w-12 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                        </svg>
+                        <p class="text-lg font-medium">No output yet</p>
+                        <p class="text-sm">Command and task outputs will appear here</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const getStyles = (category) => {
+                switch(category) {
+                    case 'output':
+                        return 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700';
+                    case 'error':
+                        return 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800';
+                    default:
+                        return 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800';
+                }
+            };
+
+            const getTypeColor = (category) => {
+                switch(category) {
+                    case 'output':
+                        return 'text-gray-700 dark:text-gray-300';
+                    case 'error':
+                        return 'text-red-700 dark:text-red-300';
+                    default:
+                        return 'text-blue-700 dark:text-blue-300';
+                }
+            };
+            console.log(log);
+            container.innerHTML = clientOutputLog.map((log, index) => `
+                <div class="border rounded-lg p-4 ${getStyles(log.category)} animate-fade-in" style="animation-delay: ${index * 0.05}s">
+                    <div class="flex justify-between items-start mb-2">
+                        <div class="flex items-center space-x-2">
+                            <span class="font-medium ${getTypeColor(log.category)}">${log.type}</span>
+                            <span class="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded-full text-gray-600 dark:text-gray-400 font-mono">
+                                ${log.clientId.substring(0, 8)}...
+                            </span>
+                        </div>
+                        <span class="text-sm text-gray-500 dark:text-gray-400">${log.timestamp}</span>
+                    </div>
+                    <pre class="text-gray-800 dark:text-gray-200 text-sm leading-relaxed whitespace-pre-wrap break-words bg-white dark:bg-gray-900 p-3 rounded border font-mono">${log.content}</pre>
+                </div>
+            `).join('');
+
+            container.scrollTop = 0;
+        }
+
+        function addActivity(type, content, category = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            
+            activityLog.unshift({
+                type: type,
+                content: content,
+                timestamp: timestamp,
+                category: category
+            });
+
+            if (activityLog.length > 100) {
+                activityLog = activityLog.slice(0, 100);
+            }
+
+            updateActivityDisplay();
+            
+            // Flash indicator
+            const indicator = document.getElementById('activityIndicator');
+            indicator.classList.remove('bg-blue-500');
+            indicator.classList.add('bg-green-500');
+            setTimeout(() => {
+                indicator.classList.remove('bg-green-500');
+                indicator.classList.add('bg-blue-500');
+            }, 1000);
+        }
+
+        function updateActivityDisplay() {
+            const container = document.getElementById('activityContainer');
+            
+            if (activityLog.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-12 text-gray-500 dark:text-gray-400">
+                        <svg class="mx-auto h-12 w-12 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                        <p class="text-lg font-medium">No activity yet</p>
+                        <p class="text-sm">System events will appear here</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const getStyles = (category) => {
+                switch(category) {
+                    case 'success':
+                        return 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800';
+                    case 'error':
+                        return 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800';
+                    case 'warning':
+                        return 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800';
+                    case 'info':
+                        return 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800';
+                    default:
+                        return 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700';
+                }
+            };
+
+            const getTypeColor = (category) => {
+                switch(category) {
+                    case 'success':
+                        return 'text-green-700 dark:text-green-300';
+                    case 'error':
+                        return 'text-red-700 dark:text-red-300';
+                    case 'warning':
+                        return 'text-yellow-700 dark:text-yellow-300';
+                    case 'info':
+                        return 'text-blue-700 dark:text-blue-300';
+                    default:
+                        return 'text-gray-700 dark:text-gray-300';
+                }
+            };
+
+            container.innerHTML = activityLog.map((log, index) => `
+                <div class="border rounded-lg p-4 ${getStyles(log.category)} animate-fade-in" style="animation-delay: ${index * 0.05}s">
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="font-medium ${getTypeColor(log.category)}">${log.type}</span>
+                        <span class="text-sm text-gray-500 dark:text-gray-400">${log.timestamp}</span>
+                    </div>
+                    <p class="text-gray-800 dark:text-gray-200 text-sm leading-relaxed break-words">${log.content}</p>
+                </div>
+            `).join('');
+
+            container.scrollTop = 0;
+        }
+
+        function clearOutput() {
+            clientOutputLog = [];
+            updateOutputDisplay();
+        }
+
+        function clearActivityLog() {
+            activityLog = [];
+            updateActivityDisplay();
+        }
+
+        function setDefaultScheduleTime() {
+            const now = new Date();
+            now.setMinutes(now.getMinutes() + 1);
+            const defaultTime = now.toISOString().slice(0, 16);
+            document.getElementById('scheduleTime').value = defaultTime;
+        }
+
+        // Initialize
+        function init() {
+            initTheme();
+            refreshData();
+            setDefaultScheduleTime();
+        }
+
+        // Auto-refresh every 5 seconds
+        setInterval(refreshData, 5000);
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', init);
     </script>
 </body>
 </html>
